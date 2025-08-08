@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: ecommerce-prod
+
+namePrefix: prod-
+
+commonLabels:
+  environment: production
+
+patches:
+  - path: replicas-patch.yaml
+  - path: resources-patch.yaml
+
+configMapGenerator:
+  - name: keycloak-realm-config
+    files:
+      - config/spring-boot-microservices-realm.json
+
+secretGenerator:
+  - name: keycloak-client-secret
+    behavior: replace
+    literals:
+      - KEYCLOAK_CLIENT_SECRET=prod-client-secret
+  - name: nextauth-secret
+    behavior: replace
+    literals:
+      - NEXTAUTH_SECRET=prod-nextauth-secret-key

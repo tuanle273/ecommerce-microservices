@@ -1,0 +1,126 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: ci-cd-pipeline
+spec:
+  workspaces:
+    - name: shared-workspace
+      description: The workspace containing the source code
+    - name: maven-settings
+      description: The workspace containing the maven settings.xml
+      optional: true
+  params:
+    - name: git-url
+      type: string
+      description: URL of the Git repository
+    - name: git-revision
+      type: string
+      description: Git revision to checkout
+      default: "main"
+    - name: backend-services
+      type: array
+      description: List of backend services to build
+      default: ["product-service", "order-service", "inventory-service", "notification-service", "api-gateway", "discovery-server"]
+    - name: image-registry
+      type: string
+      description: Registry for the built images
+      default: "image-registry.openshift-image-registry.svc:5000/ecommerce"
+    - name: manifest-dir
+      type: string
+      description: Directory containing Kubernetes manifests
+      default: "kubernetes-manifests"
+    - name: overlay
+      type: string
+      description: Kustomize overlay to use
+      default: "overlays/dev"
+    - name: namespace
+      type: string
+      description: Namespace to deploy to
+      default: "ecommerce-dev"
+  tasks:
+    - name: fetch-source
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+        - name: subdirectory
+          value: ""
+    
+    - name: build-frontend
+      taskRef:
+        name: npm-build
+      runAfter:
+        - fetch-source
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: CONTEXT_DIR
+          value: "frontend"
+    
+    - name: build-frontend-image
+      taskRef:
+        name: buildah
+      runAfter:
+        - build-frontend
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: "$(params.image-registry)/frontend:latest"
+        - name: CONTEXT_DIR
+          value: "frontend"
+    
+    - name: build-backend
+      taskRef:
+        name: maven-build
+      runAfter:
+        - fetch-source
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: maven-settings
+          workspace: maven-settings
+      params:
+        - name: CONTEXT_DIR
+          value: "."
+        - name: GOALS
+          value: ["package", "-DskipTests"]
+    
+    - name: build-backend-images
+      taskRef:
+        name: buildah
+      runAfter:
+        - build-backend
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: "$(params.image-registry)/$(params.backend-services[*]):latest"
+        - name: CONTEXT_DIR
+          value: "$(params.backend-services[*])"
+    
+    - name: deploy
+      taskRef:
+        name: deploy-to-openshift
+      runAfter:
+        - build-frontend-image
+        - build-backend-images
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: MANIFEST_DIR
+          value: $(params.manifest-dir)
+        - name: OVERLAY
+          value: $(params.overlay)
+        - name: NAMESPACE
+          value: $(params.namespace)

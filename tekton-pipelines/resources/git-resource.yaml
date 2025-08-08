@@ -1,0 +1,11 @@
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: ecommerce-git
+spec:
+  type: git
+  params:
+    - name: url
+      value: https://github.com/tuanle273/ecommerce-microservices.git
+    - name: revision
+      value: main

@@ -1,0 +1,68 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: buildah
+spec:
+  workspaces:
+    - name: source
+      description: The workspace containing the source code and Dockerfile
+  params:
+    - name: IMAGE
+      description: Reference of the image to build
+      type: string
+    - name: CONTEXT_DIR
+      description: Path to the directory containing the Dockerfile
+      type: string
+      default: "."
+    - name: DOCKERFILE
+      description: Path to the Dockerfile
+      type: string
+      default: "Dockerfile"
+    - name: TLSVERIFY
+      description: Verify the TLS on the registry endpoint
+      type: string
+      default: "true"
+    - name: BUILD_EXTRA_ARGS
+      description: Extra parameters to pass to buildah build
+      type: array
+      default: []
+    - name: PUSH_EXTRA_ARGS
+      description: Extra parameters to pass to buildah push
+      type: array
+      default: []
+  steps:
+    - name: build
+      image: quay.io/buildah/stable:latest
+      workingDir: $(workspaces.source.path)
+      securityContext:
+        privileged: true
+      script: |
+        cd $(params.CONTEXT_DIR)
+        buildah --storage-driver=vfs build \
+          --tls-verify=$(params.TLSVERIFY) \
+          --layers \
+          -f $(params.DOCKERFILE) \
+          $(params.BUILD_EXTRA_ARGS) \
+          -t $(params.IMAGE) .
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+    
+    - name: push
+      image: quay.io/buildah/stable:latest
+      workingDir: $(workspaces.source.path)
+      securityContext:
+        privileged: true
+      script: |
+        buildah --storage-driver=vfs push \
+          --tls-verify=$(params.TLSVERIFY) \
+          $(params.PUSH_EXTRA_ARGS) \
+          $(params.IMAGE) \
+          docker://$(params.IMAGE)
+      volumeMounts:
+        - name: varlibcontainers
+          mountPath: /var/lib/containers
+  
+  volumes:
+    - name: varlibcontainers
+      emptyDir: {}

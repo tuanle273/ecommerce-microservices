@@ -1,0 +1,75 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: backend-build-pipeline
+spec:
+  workspaces:
+    - name: shared-workspace
+      description: The workspace containing the source code
+    - name: maven-settings
+      description: The workspace containing the maven settings.xml
+      optional: true
+  params:
+    - name: git-url
+      type: string
+      description: URL of the Git repository
+    - name: git-revision
+      type: string
+      description: Git revision to checkout
+      default: "main"
+    - name: image-name
+      type: string
+      description: Name of the image to build
+    - name: context-dir
+      type: string
+      description: The context directory within the source
+    - name: maven-goals
+      type: array
+      description: Maven goals to execute
+      default: ["package", "-DskipTests"]
+  tasks:
+    - name: fetch-source
+      taskRef:
+        name: git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+        - name: subdirectory
+          value: ""
+    
+    - name: maven-build
+      taskRef:
+        name: maven-build
+      runAfter:
+        - fetch-source
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: maven-settings
+          workspace: maven-settings
+      params:
+        - name: CONTEXT_DIR
+          value: $(params.context-dir)
+        - name: GOALS
+          value: $(params.maven-goals)
+    
+    - name: build-image
+      taskRef:
+        name: buildah
+      runAfter:
+        - maven-build
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: $(params.image-name)
+        - name: CONTEXT_DIR
+          value: $(params.context-dir)
+        - name: DOCKERFILE
+          value: "Dockerfile"

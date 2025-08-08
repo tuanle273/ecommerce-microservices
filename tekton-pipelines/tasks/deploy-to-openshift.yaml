@@ -1,0 +1,43 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: deploy-to-openshift
+spec:
+  workspaces:
+    - name: source
+      description: The workspace containing the kubernetes manifests
+  params:
+    - name: MANIFEST_DIR
+      description: The directory containing the kubernetes manifests
+      type: string
+      default: "kubernetes-manifests"
+    - name: OVERLAY
+      description: The kustomize overlay to use
+      type: string
+      default: "overlays/dev"
+    - name: NAMESPACE
+      description: The namespace to deploy to
+      type: string
+      default: "ecommerce-dev"
+    - name: APPLY_ARGS
+      description: Additional arguments to pass to kubectl apply
+      type: array
+      default: []
+  steps:
+    - name: deploy
+      image: quay.io/openshift/origin-cli:latest
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/usr/bin/env bash
+        set -e
+        
+        echo "Deploying to OpenShift namespace $(params.NAMESPACE)"
+        
+        # Create namespace if it doesn't exist
+        oc get namespace $(params.NAMESPACE) || oc create namespace $(params.NAMESPACE)
+        
+        # Apply kustomize overlay
+        cd $(params.MANIFEST_DIR)
+        oc apply -k $(params.OVERLAY) -n $(params.NAMESPACE) $(params.APPLY_ARGS[*])
+        
+        echo "Deployment completed successfully"

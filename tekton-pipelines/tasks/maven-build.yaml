@@ -1,0 +1,80 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: maven-build
+spec:
+  workspaces:
+    - name: source
+      description: The workspace containing the maven project
+    - name: maven-settings
+      description: The workspace containing the maven settings.xml
+      optional: true
+  params:
+    - name: CONTEXT_DIR
+      description: The context directory within the source
+      type: string
+      default: "."
+    - name: GOALS
+      description: The Maven goals to run
+      type: array
+      default: ["package", "-DskipTests"]
+    - name: MAVEN_MIRROR_URL
+      description: The Maven mirror URL
+      type: string
+      default: ""
+    - name: MAVEN_OPTS
+      description: The Maven options
+      type: string
+      default: "-Xmx1024m"
+  steps:
+    - name: mvn-settings
+      image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+      script: |
+        #!/usr/bin/env bash
+        
+        [[ -f $(workspaces.maven-settings.path)/settings.xml ]] && \
+        echo "Using existing settings.xml" && \
+        cp $(workspaces.maven-settings.path)/settings.xml $(workspaces.source.path)/settings.xml && \
+        exit 0
+        
+        cat > $(workspaces.source.path)/settings.xml <<EOF
+        <settings>
+          <mirrors>
+            <mirror>
+              <id>central-proxy</id>
+              <name>Central Repository</name>
+              <url>${MAVEN_MIRROR_URL}</url>
+              <mirrorOf>central</mirrorOf>
+            </mirror>
+          </mirrors>
+        </settings>
+        EOF
+      env:
+        - name: MAVEN_MIRROR_URL
+          value: $(params.MAVEN_MIRROR_URL)
+      workingDir: $(workspaces.source.path)
+      volumeMounts:
+        - name: temp-volume
+          mountPath: /tmp
+      
+    - name: mvn-build
+      image: maven:3.8-openjdk-17
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          cd $(params.CONTEXT_DIR)
+          if [ -f "$(workspaces.source.path)/settings.xml" ]; then
+            export MAVEN_CONFIG="$(workspaces.source.path)"
+          fi
+          mvn $(params.GOALS[*]) -Dmaven.repo.local=$(workspaces.source.path)/.m2/repository
+      env:
+        - name: MAVEN_OPTS
+          value: $(params.MAVEN_OPTS)
+      workingDir: $(workspaces.source.path)
+      volumeMounts:
+        - name: temp-volume
+          mountPath: /tmp
+  
+  volumes:
+    - name: temp-volume
+      emptyDir: {}

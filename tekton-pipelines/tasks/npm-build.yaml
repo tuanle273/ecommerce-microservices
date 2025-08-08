@@ -1,0 +1,39 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: npm-build
+spec:
+  workspaces:
+    - name: source
+      description: The workspace containing the npm project
+  params:
+    - name: CONTEXT_DIR
+      description: The context directory within the source
+      type: string
+      default: "."
+    - name: INSTALL_COMMAND
+      description: The npm command to run for installation
+      type: string
+      default: "npm ci"
+    - name: BUILD_COMMAND
+      description: The npm command to run for build
+      type: string
+      default: "npm run build"
+    - name: NODE_VERSION
+      description: The Node.js version to use
+      type: string
+      default: "18"
+  steps:
+    - name: npm-install
+      image: node:$(params.NODE_VERSION)-alpine
+      workingDir: $(workspaces.source.path)/$(params.CONTEXT_DIR)
+      script: |
+        echo "Running npm install in $(pwd)"
+        $(params.INSTALL_COMMAND)
+      
+    - name: npm-build
+      image: node:$(params.NODE_VERSION)-alpine
+      workingDir: $(workspaces.source.path)/$(params.CONTEXT_DIR)
+      script: |
+        echo "Running npm build in $(pwd)"
+        $(params.BUILD_COMMAND)

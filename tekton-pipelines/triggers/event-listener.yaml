@@ -1,0 +1,12 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: ecommerce-webhook
+spec:
+  serviceAccountName: tekton-triggers-sa
+  triggers:
+    - name: github-push
+      bindings:
+        - ref: ecommerce-trigger-binding
+      template:
+        ref: ecommerce-trigger-template
