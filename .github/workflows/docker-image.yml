@@ -14,5 +14,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install dependencies
+      run: npm install
+    - name: Build Next.js app
+      run: npm run build
     - name: Build the Docker image
       run: docker build . --file frontend/Dockerfile --tag my-image-name:$(date +%s)
